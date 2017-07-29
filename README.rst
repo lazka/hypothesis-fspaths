@@ -20,3 +20,7 @@ Example
             open(path).close()
         except IOError:
             pass
+
+
+.. image:: https://travis-ci.org/qlazka/hypothesis-fspaths.svg?branch=master
+    :target: https://travis-ci.org/lazka/hypothesis-fspaths
