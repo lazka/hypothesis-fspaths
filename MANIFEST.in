@@ -2,3 +2,4 @@ include tests/*.py
 include LICENSE
 include MANIFEST.in
 include README.rst
+include NEWS
