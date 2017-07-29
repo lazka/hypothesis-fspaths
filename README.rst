@@ -17,6 +17,6 @@ Example
     @given(fspaths())
     def test_open_file(path):
         try:
-            open(path)
+            open(path).close()
         except IOError:
             pass
