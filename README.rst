@@ -11,6 +11,7 @@ Example
 
 .. code:: python
 
+    from hypothesis import given
     from hypothesis_fspaths import fspaths
 
     @given(fspaths())
