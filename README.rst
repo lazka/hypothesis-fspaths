@@ -22,5 +22,5 @@ Example
             pass
 
 
-.. image:: https://travis-ci.org/qlazka/hypothesis-fspaths.svg?branch=master
+.. image:: https://travis-ci.org/lazka/hypothesis-fspaths.svg?branch=master
     :target: https://travis-ci.org/lazka/hypothesis-fspaths
