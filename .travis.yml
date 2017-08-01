@@ -77,7 +77,7 @@ install:
   - if [ "$TYPE" == "osx" ] && [ "$PYVER" == "2" ]; then python2 -m pip install virtualenv; fi
   - if [ "$TYPE" == "osx" ] && [ "$PYVER" == "2" ]; then virtualenv venv -p python2; fi
   - if [ "$TYPE" == "osx" ]; then source venv/bin/activate; fi
-  - if [ "$TYPE" == "osx" ] || [ "$TYPE" == "linux" ]; then python -m pip install pytest hypothesis; fi
+  - if [ "$TYPE" == "osx" ] || [ "$TYPE" == "linux" ]; then python -m pip --upgrade install pytest hypothesis; fi
 
 script:
   - if [ "$TYPE" == "linux" ]; then export LANG=C; export LC_ALL=C; fi
