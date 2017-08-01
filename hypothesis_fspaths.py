@@ -24,18 +24,26 @@ import os
 import sys
 
 from hypothesis.strategies import composite, \
-    binary, randoms, one_of, characters, text
+    binary, randoms, one_of, characters, text, permutations
 
 PY3 = (sys.version_info[0] == 3)
 
 
 class _PathLike(object):
+    """A class implementing the os.PathLike protocol available since Python
+    3.6.
+
+    See https://www.python.org/dev/peps/pep-0519/ for more details.
+    """
 
     def __init__(self, value):
         self._value = value
 
     def __fspath__(self):
         return self._value
+
+    def __repr__(self):
+        return 'pathlike(%r)' % self._value
 
 
 @composite
@@ -91,14 +99,7 @@ def fspaths(draw, allow_pathlike=True, allow_existing=False):
                 sys.getfilesystemencoding(),
                 'surrogateescape' if PY3 else 'ignore'))
 
-        random = draw(randoms())
-
-        def shuffle_text(t):
-            l = list(t)
-            random.shuffle(l)
-            return u"".join(l)
-
-        strategies.append(unix_path_text.map(shuffle_text))
+        strategies.append(permutations(draw(unix_path_text)).map(u"".join))
 
     main_strategy = one_of(strategies)
 
