@@ -24,7 +24,8 @@ import os
 import sys
 
 from hypothesis.strategies import composite, \
-    binary, randoms, one_of, characters, text, permutations
+    binary, one_of, characters, text, permutations
+from hypothesis.errors import InvalidArgument
 
 PY3 = (sys.version_info[0] == 3)
 
@@ -47,7 +48,7 @@ class _PathLike(object):
 
 
 @composite
-def fspaths(draw, allow_pathlike=True, allow_existing=False):
+def fspaths(draw, allow_pathlike=None, allow_existing=False):
     """A strategy which generates filesystem path values.
 
     The generated values include everything which the builtin
@@ -58,27 +59,42 @@ def fspaths(draw, allow_pathlike=True, allow_existing=False):
     system, the Python version, and on the filesystem encoding as returned by
     :func:`sys.getfilesystemencoding`.
 
-    :param bool allow_pathlike:
-        If the result can be a pathlike (see :class:`os.PathLike`)
+    :param allow_pathlike:
+        By default makes the strategy also include objects implementing the
+        :class:`python:os.PathLike` interface when Python >= 3.6 is used. If
+        :obj:`python:False` no pathlike objects will be generated. If
+        :obj:`python:True` pathlike will be generated (Python >= 3.6 required)
+
+    :type allow_pathlike: :obj:`python:bool` or :obj:`python:None`
+
     :param bool allow_existing:
-        If paths which happen to exist on the filesystem should be returned.
-        This is :obj:`python:False` by default to prevent tests from accessing
-        existing files by accident.
+        If paths which exist on the filesystem should be generated as well.
 
     .. versionadded:: 3.15
-
     """
+
+    has_pathlike = hasattr(os, "PathLike")
+
+    if allow_pathlike is None:
+        allow_pathlike = has_pathlike
+    if allow_pathlike and not has_pathlike:
+        raise InvalidArgument(
+            "allow_pathlike: os.PathLike not supported, use None instead "
+            "to enable it only when available")
 
     strategies = []
 
     if os.name == 'nt':  # pragma: no cover
-        hight_surrogate = characters(
+        # Windows paths can contain all surrogates and even surrogate pairs
+        # if two paths are concatenated. This makes it more likely for them to
+        # be generated.
+        high_surrogate = characters(
             min_codepoint=0xD800, max_codepoint=0xDBFF)
         low_surrogate = characters(
             min_codepoint=0xDC00, max_codepoint=0xDFFF)
         uni_char = characters(min_codepoint=0x1)
         windows_path_text = text(
-            alphabet=one_of(uni_char, hight_surrogate, low_surrogate))
+            alphabet=one_of(uni_char, high_surrogate, low_surrogate))
         strategies.append(windows_path_text)
 
         def text_to_bytes(path):
@@ -99,7 +115,12 @@ def fspaths(draw, allow_pathlike=True, allow_existing=False):
                 sys.getfilesystemencoding(),
                 'surrogateescape' if PY3 else 'ignore'))
 
-        strategies.append(permutations(draw(unix_path_text)).map(u"".join))
+        # Two surrogates generated through surrogateescape can generate
+        # a valid utf-8 sequence when encoded and result in a different
+        # code point when decoded again. Can happen when two paths get
+        # concatenated. Shuffling makes it possible to generate such a case.
+        shuffled_unix_text = permutations(draw(unix_path_text)).map(u"".join)
+        strategies.append(shuffled_unix_text)
 
     main_strategy = one_of(strategies)
 

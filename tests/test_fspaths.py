@@ -31,6 +31,7 @@ import pytest
 
 from hypothesis import given
 from hypothesis_fspaths import fspaths
+from hypothesis.errors import InvalidArgument
 
 
 text_type = type(u"")
@@ -109,6 +110,12 @@ def test_open(tempdir_path, path):
 @given(fspaths(allow_pathlike=False))
 def test_allow_pathlike_false(path):
     assert isinstance(path, (bytes, text_type))
+
+
+def test_allow_pathlike_fail_when_no_avail():
+    if not hasattr(os, "PathLike"):
+        with pytest.raises(InvalidArgument):
+            fspaths(allow_pathlike=True).example()
 
 
 def test_example_basic():
