@@ -23,8 +23,10 @@
 import os
 import sys
 
-from hypothesis.strategies import composite, sampled_from, lists, \
-    integers, binary, randoms
+from hypothesis.strategies import composite, \
+    binary, randoms, one_of, characters, text
+
+PY3 = (sys.version_info[0] == 3)
 
 
 class _PathLike(object):
@@ -37,73 +39,74 @@ class _PathLike(object):
 
 
 @composite
-def fspaths(draw, allow_pathlike=True):
-    """A hypothesis strategy which gives valid path values.
+def fspaths(draw, allow_pathlike=True, allow_existing=False):
+    """A strategy which generates filesystem path values.
 
-    Valid path values are everything which when passed to open() will not raise
-    ValueError or TypeError (but might raise OSError due to file system or
-    operating system restrictions).
+    The generated values include everything which the builtin
+    :func:`python:open` function accepts i.e. which won't lead to
+    :exc:`ValueError` or :exc:`TypeError` being raised.
 
-    Args:
-        allow_pathlike (bool):
-            If the result can be a pathlike (see :class:`os.PathLike`)
+    Note that the range of the returned values depends on the operating
+    system, the Python version, and on the filesystem encoding as returned by
+    :func:`sys.getfilesystemencoding`.
+
+    :param bool allow_pathlike:
+        If the result can be a pathlike (see :class:`os.PathLike`)
+    :param bool allow_existing:
+        If paths which happen to exist on the filesystem should be returned.
+        This is :obj:`python:False` by default to prevent tests from accessing
+        existing files by accident.
+
+    .. versionadded:: 3.15
+
     """
 
-    s = []
+    strategies = []
 
-    if os.name == "nt":
-        if sys.version_info[0] == 3:
-            unichr_ = chr
-        else:
-            unichr_ = unichr
-
-        hight_surrogate = integers(
-            min_value=0xD800, max_value=0xDBFF).map(lambda i: unichr_(i))
-        low_surrogate = integers(
-            min_value=0xDC00, max_value=0xDFFF).map(lambda i: unichr_(i))
-        uni_char = integers(
-            min_value=1, max_value=sys.maxunicode).map(lambda i: unichr_(i))
-        any_char = sampled_from([
-            draw(uni_char), draw(hight_surrogate), draw(low_surrogate)])
-        any_text = lists(any_char).map(lambda l: u"".join(l))
-
-        windows_path_text = any_text
-        s.append(windows_path_text)
+    if os.name == 'nt':  # pragma: no cover
+        hight_surrogate = characters(
+            min_codepoint=0xD800, max_codepoint=0xDBFF)
+        low_surrogate = characters(
+            min_codepoint=0xDC00, max_codepoint=0xDFFF)
+        uni_char = characters(min_codepoint=0x1)
+        windows_path_text = text(
+            alphabet=one_of(uni_char, hight_surrogate, low_surrogate))
+        strategies.append(windows_path_text)
 
         def text_to_bytes(path):
             fs_enc = sys.getfilesystemencoding()
             try:
-                return path.encode(fs_enc, "surrogatepass")
+                return path.encode(fs_enc, 'surrogatepass')
             except UnicodeEncodeError:
-                return path.encode(fs_enc, "replace")
+                return path.encode(fs_enc, 'replace')
 
         windows_path_bytes = windows_path_text.map(text_to_bytes)
-        s.append(windows_path_bytes)
+        strategies.append(windows_path_bytes)
     else:
         unix_path_bytes = binary().map(lambda b: b.replace(b"\x00", b" "))
-        s.append(unix_path_bytes)
+        strategies.append(unix_path_bytes)
 
-        if sys.version_info[0] == 3:
-            unix_path_text = unix_path_bytes.map(
-                lambda b: b.decode(
-                    sys.getfilesystemencoding(), "surrogateescape"))
-        else:
-            unix_path_text = unix_path_bytes.map(
-                lambda b: b.decode(
-                    sys.getfilesystemencoding(), "ignore"))
+        unix_path_text = unix_path_bytes.map(
+            lambda b: b.decode(
+                sys.getfilesystemencoding(),
+                'surrogateescape' if PY3 else 'ignore'))
 
-        r = draw(randoms())
+        random = draw(randoms())
 
         def shuffle_text(t):
             l = list(t)
-            r.shuffle(l)
+            random.shuffle(l)
             return u"".join(l)
 
-        s.append(unix_path_text.map(shuffle_text))
+        strategies.append(unix_path_text.map(shuffle_text))
 
-    result = draw(sampled_from(list(map(draw, s))))
+    main_strategy = one_of(strategies)
 
-    if allow_pathlike and hasattr(os, "fspath"):
-        result = draw(sampled_from([result, _PathLike(result)]))
+    if not allow_existing:
+        main_strategy = main_strategy.filter(lambda p: not os.path.exists(p))
 
-    return result
+    if allow_pathlike and hasattr(os, 'fspath'):
+        pathlike_strategy = main_strategy.map(lambda p: _PathLike(p))
+        main_strategy = one_of(main_strategy, pathlike_strategy)
+
+    return draw(main_strategy)
