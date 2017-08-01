@@ -23,8 +23,8 @@
 import os
 import sys
 
-from hypothesis.strategies import composite, \
-    binary, one_of, characters, text, permutations
+from hypothesis.strategies import composite, binary, one_of, characters, \
+    text, permutations
 from hypothesis.errors import InvalidArgument
 
 PY3 = (sys.version_info[0] == 3)
@@ -88,13 +88,10 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
         # Windows paths can contain all surrogates and even surrogate pairs
         # if two paths are concatenated. This makes it more likely for them to
         # be generated.
-        high_surrogate = characters(
-            min_codepoint=0xD800, max_codepoint=0xDBFF)
-        low_surrogate = characters(
-            min_codepoint=0xDC00, max_codepoint=0xDFFF)
+        surrogate = characters(
+            min_codepoint=0xD800, max_codepoint=0xDFFF)
         uni_char = characters(min_codepoint=0x1)
-        windows_path_text = text(
-            alphabet=one_of(uni_char, high_surrogate, low_surrogate))
+        windows_path_text = text(alphabet=one_of(uni_char, surrogate))
         strategies.append(windows_path_text)
 
         def text_to_bytes(path):
@@ -122,7 +119,7 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
         shuffled_unix_text = permutations(draw(unix_path_text)).map(u"".join)
         strategies.append(shuffled_unix_text)
 
-    main_strategy = one_of(strategies)
+    main_strategy = one_of(*strategies)
 
     if not allow_existing:
         main_strategy = main_strategy.filter(lambda p: not os.path.exists(p))

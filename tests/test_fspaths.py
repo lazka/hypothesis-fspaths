@@ -33,11 +33,38 @@ from hypothesis import given
 from hypothesis_fspaths import fspaths
 from hypothesis.errors import InvalidArgument
 
-
 text_type = type(u"")
 PY3 = (sys.version_info[0] == 3)
 encoding = sys.getfilesystemencoding()
 is_win = (os.name == 'nt')
+
+
+def test_path_property_examples():
+    fspaths(allow_pathlike=False).filter(
+        lambda p: p and os.path.normpath(p) != p).example()
+
+    if os.name == 'nt':
+        fspaths(allow_pathlike=False).filter(
+            lambda p: os.path.normcase(p) != p).example()
+
+    if os.name == 'nt':
+        fspaths(allow_pathlike=False).filter(
+            lambda p: os.path.splitdrive(p)[0]).example()
+
+    fspaths(allow_pathlike=False).filter(
+        lambda p: os.path.splitext(p)[1]).example()
+
+    if os.name == 'nt':
+        fspaths(allow_pathlike=False).filter(
+            lambda p: os.path.splitunc(p)[0]).example()
+
+    fspaths(allow_pathlike=False).filter(
+        lambda p: os.path.basename(p) == p).example()
+
+    fspaths(allow_pathlike=False).filter(os.path.isabs).example()
+    fspaths(allow_pathlike=False).filter(os.path.dirname).example()
+    fspaths(allow_pathlike=False).filter(os.path.basename).example()
+    fspaths(allow_pathlike=False).filter(os.path.abspath).example()
 
 
 def norm_encoding(name):
@@ -112,7 +139,7 @@ def test_allow_pathlike_false(path):
     assert isinstance(path, (bytes, text_type))
 
 
-def test_allow_pathlike_fail_when_no_avail():
+def test_allow_pathlike_fail_when_not_available():
     if not hasattr(os, "PathLike"):
         with pytest.raises(InvalidArgument):
             fspaths(allow_pathlike=True).example()
