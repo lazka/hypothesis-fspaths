@@ -23,7 +23,7 @@
 import os
 import sys
 
-from hypothesis.strategies import composite, binary, one_of, characters, \
+from hypothesis.strategies import composite, one_of, characters, \
     text, permutations, builds, lists, sampled_from, just
 from hypothesis.errors import InvalidArgument
 
@@ -50,7 +50,9 @@ class _PathLike(object):
 
 @composite
 def _filename(draw, result_type=None):
-
+    # Various ASCII chars have a special meaning for the operating system,
+    # so make them more common
+    ascii_char = characters(min_codepoint=0x01, max_codepoint=0x7f)
     if os.name == 'nt':  # pragma: no cover
         # Windows paths can contain all surrogates and even surrogate pairs
         # if two paths are concatenated. This makes it more likely for them to
@@ -58,7 +60,8 @@ def _filename(draw, result_type=None):
         surrogate = characters(
             min_codepoint=0xD800, max_codepoint=0xDFFF)
         uni_char = characters(min_codepoint=0x1)
-        text_strategy = text(alphabet=one_of(uni_char, surrogate))
+        text_strategy = text(
+            alphabet=one_of(uni_char, surrogate, ascii_char))
 
         def text_to_bytes(path):
             fs_enc = sys.getfilesystemencoding()
@@ -69,7 +72,9 @@ def _filename(draw, result_type=None):
 
         bytes_strategy = text_strategy.map(text_to_bytes)
     else:
-        bytes_strategy = binary().map(lambda b: b.replace(b"\x00", b" "))
+        latin_char = characters(min_codepoint=0x01, max_codepoint=0xff)
+        bytes_strategy = text(alphabet=one_of(latin_char, ascii_char)).map(
+            lambda t: t.encode("latin-1"))
 
         unix_path_text = bytes_strategy.map(
             lambda b: b.decode(
@@ -90,7 +95,7 @@ def _filename(draw, result_type=None):
         return draw(text_strategy)
 
 
-def _to_path(s, result_type):
+def _str_to_path(s, result_type):
     """Given an ASCII str, returns a path of the given type"""
 
     assert isinstance(s, str)
@@ -102,13 +107,13 @@ def _to_path(s, result_type):
 
 
 @composite
-def _root(draw, result_type):
+def _path_root(draw, result_type):
     """Generates a root component for a path"""
 
     # Based on https://en.wikipedia.org/wiki/Path_(computing)
 
     def tp(s):
-        return _to_path(s, result_type)
+        return _str_to_path(s, result_type)
 
     if os.name != 'nt':
         return tp(os.sep)
@@ -180,30 +185,35 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
 
     result_type = draw(sampled_from([bytes, text_type]))
 
-    def tp(s):
-        return _to_path(s, result_type)
+    def tp(s=""):
+        return _str_to_path(s, result_type)
 
     special_component = sampled_from([tp(os.curdir), tp(os.pardir)])
     normal_component = _filename(result_type)
     path_component = one_of(normal_component, special_component)
     extension = normal_component.map(lambda f: tp(os.extsep) + f)
-    root = _root(result_type)
+    root = _path_root(result_type)
 
     def optional(st):
         return one_of(st, just(result_type()))
 
     sep = sampled_from([os.sep, os.altsep or os.sep]).map(tp)
     path_part = builds(lambda s, l: s.join(l), sep, lists(path_component))
-    main_strategy = builds(lambda *x: tp("").join(x),
+    main_strategy = builds(lambda *x: tp().join(x),
                            optional(root), path_part, optional(extension))
 
     if not allow_existing:
 
         def check_not_exists(path):
+            # os.path.exists returns False for broken symlinks, so use lstat
             try:
-                return not os.path.exists(path)
+                os.lstat(path)
+            except OSError:
+                return True
             except ValueError:
-                # os.path.exists fails if the path is too long on Windows
+                # ValueError for too long Paths on Windows
+                return False
+            else:
                 return False
 
         main_strategy = main_strategy.filter(check_not_exists)

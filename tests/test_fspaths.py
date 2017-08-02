@@ -141,6 +141,16 @@ def test_allow_pathlike_fail_when_not_available():
             fspaths(allow_pathlike=True).example()
 
 
+@given(fspaths())
+def test_no_allow_existing(path):
+    try:
+        os.lstat(path)
+    except OSError:
+        pass
+    else:
+        assert False
+
+
 def test_example_basic():
     fspaths(allow_existing=True).filter(lambda p: not fspath(p)).example()
     fspaths(allow_existing=True).filter(
