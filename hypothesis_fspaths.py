@@ -24,9 +24,10 @@ import os
 import sys
 
 from hypothesis.strategies import composite, binary, one_of, characters, \
-    text, permutations
+    text, permutations, builds, lists, sampled_from, just
 from hypothesis.errors import InvalidArgument
 
+text_type = type(u"")
 PY3 = (sys.version_info[0] == 3)
 
 
@@ -45,6 +46,101 @@ class _PathLike(object):
 
     def __repr__(self):
         return 'pathlike(%r)' % self._value
+
+
+@composite
+def _filename(draw, result_type=None):
+
+    if os.name == 'nt':  # pragma: no cover
+        # Windows paths can contain all surrogates and even surrogate pairs
+        # if two paths are concatenated. This makes it more likely for them to
+        # be generated.
+        surrogate = characters(
+            min_codepoint=0xD800, max_codepoint=0xDFFF)
+        uni_char = characters(min_codepoint=0x1)
+        text_strategy = text(alphabet=one_of(uni_char, surrogate))
+
+        def text_to_bytes(path):
+            fs_enc = sys.getfilesystemencoding()
+            try:
+                return path.encode(fs_enc, 'surrogatepass')
+            except UnicodeEncodeError:
+                return path.encode(fs_enc, 'replace')
+
+        bytes_strategy = text_strategy.map(text_to_bytes)
+    else:
+        bytes_strategy = binary().map(lambda b: b.replace(b"\x00", b" "))
+
+        unix_path_text = bytes_strategy.map(
+            lambda b: b.decode(
+                sys.getfilesystemencoding(),
+                'surrogateescape' if PY3 else 'ignore'))
+
+        # Two surrogates generated through surrogateescape can generate
+        # a valid utf-8 sequence when encoded and result in a different
+        # code point when decoded again. Can happen when two paths get
+        # concatenated. Shuffling makes it possible to generate such a case.
+        text_strategy = permutations(draw(unix_path_text)).map(u"".join)
+
+    if result_type is None:
+        return draw(one_of(bytes_strategy, text_strategy))
+    elif result_type is bytes:
+        return draw(bytes_strategy)
+    else:
+        return draw(text_strategy)
+
+
+def _to_path(s, result_type):
+    """Given an ASCII str, returns a path of the given type"""
+
+    assert isinstance(s, str)
+    if isinstance(s, bytes) and result_type is text_type:
+        return s.decode("ascii")
+    elif isinstance(s, text_type) and result_type is bytes:
+        return s.encode("ascii")
+    return s
+
+
+@composite
+def _root(draw, result_type):
+    """Generates a root component for a path"""
+
+    # Based on https://en.wikipedia.org/wiki/Path_(computing)
+
+    def tp(s):
+        return _to_path(s, result_type)
+
+    if os.name != 'nt':
+        return tp(os.sep)
+
+    sep = sampled_from([os.sep, os.altsep or os.sep]).map(tp)
+    name = _filename(result_type)
+    char = name.map(lambda n: n[0:1])
+
+    relative = sep
+    # [drive_letter]:\
+    drive = builds(lambda *x: tp("").join(x), char, just(tp(":")), sep)
+
+    network = one_of([
+        # \\[server]\[sharename]\
+        builds(lambda *x: tp("").join(x), sep, sep, name, sep, name, sep),
+        # \\?\[drive_spec]:\
+        builds(lambda *x: tp("").join(x), sep, sep, just(tp("?")), sep, drive),
+        # \\?\[server]\[sharename]\
+        builds(lambda *x: tp("").join(x),
+               sep, sep, just(tp("?")), sep, name, sep, name, sep),
+        # \\?\UNC\[server]\[sharename]\
+        builds(lambda *x: tp("").join(x),
+               sep, sep, just(tp("?")), sep, just(tp("UNC")), sep, name, sep,
+               name, sep),
+        # \\.\[physical_device]\
+        builds(lambda *x: tp("").join(x),
+               sep, sep, just(tp(".")), sep, name, sep),
+    ])
+
+    final = one_of(relative, drive, network)
+
+    return draw(final)
 
 
 @composite
@@ -82,47 +178,35 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
             "allow_pathlike: os.PathLike not supported, use None instead "
             "to enable it only when available")
 
-    strategies = []
+    result_type = draw(sampled_from([bytes, text_type]))
 
-    if os.name == 'nt':  # pragma: no cover
-        # Windows paths can contain all surrogates and even surrogate pairs
-        # if two paths are concatenated. This makes it more likely for them to
-        # be generated.
-        surrogate = characters(
-            min_codepoint=0xD800, max_codepoint=0xDFFF)
-        uni_char = characters(min_codepoint=0x1)
-        windows_path_text = text(alphabet=one_of(uni_char, surrogate))
-        strategies.append(windows_path_text)
+    def tp(s):
+        return _to_path(s, result_type)
 
-        def text_to_bytes(path):
-            fs_enc = sys.getfilesystemencoding()
-            try:
-                return path.encode(fs_enc, 'surrogatepass')
-            except UnicodeEncodeError:
-                return path.encode(fs_enc, 'replace')
+    special_component = sampled_from([tp(os.curdir), tp(os.pardir)])
+    normal_component = _filename(result_type)
+    path_component = one_of(normal_component, special_component)
+    extension = normal_component.map(lambda f: tp(os.extsep) + f)
+    root = _root(result_type)
 
-        windows_path_bytes = windows_path_text.map(text_to_bytes)
-        strategies.append(windows_path_bytes)
-    else:
-        unix_path_bytes = binary().map(lambda b: b.replace(b"\x00", b" "))
-        strategies.append(unix_path_bytes)
+    def optional(st):
+        return one_of(st, just(result_type()))
 
-        unix_path_text = unix_path_bytes.map(
-            lambda b: b.decode(
-                sys.getfilesystemencoding(),
-                'surrogateescape' if PY3 else 'ignore'))
-
-        # Two surrogates generated through surrogateescape can generate
-        # a valid utf-8 sequence when encoded and result in a different
-        # code point when decoded again. Can happen when two paths get
-        # concatenated. Shuffling makes it possible to generate such a case.
-        shuffled_unix_text = permutations(draw(unix_path_text)).map(u"".join)
-        strategies.append(shuffled_unix_text)
-
-    main_strategy = one_of(*strategies)
+    sep = sampled_from([os.sep, os.altsep or os.sep]).map(tp)
+    path_part = builds(lambda s, l: s.join(l), sep, lists(path_component))
+    main_strategy = builds(lambda *x: tp("").join(x),
+                           optional(root), path_part, optional(extension))
 
     if not allow_existing:
-        main_strategy = main_strategy.filter(lambda p: not os.path.exists(p))
+
+        def check_not_exists(path):
+            try:
+                return not os.path.exists(path)
+            except ValueError:
+                # os.path.exists fails if the path is too long on Windows
+                return False
+
+        main_strategy = main_strategy.filter(check_not_exists)
 
     if allow_pathlike and hasattr(os, 'fspath'):
         pathlike_strategy = main_strategy.map(lambda p: _PathLike(p))
