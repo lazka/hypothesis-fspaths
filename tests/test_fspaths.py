@@ -33,14 +33,14 @@ from hypothesis import given
 from hypothesis_fspaths import fspaths
 from hypothesis.errors import InvalidArgument
 
-text_type = type(u"")
+text_type = type(u'')
 PY3 = (sys.version_info[0] == 3)
 encoding = sys.getfilesystemencoding()
 is_win = (os.name == 'nt')
 
 
 def test_path_property_examples():
-    if os.name == 'nt':
+    if is_win:
         fspaths(allow_pathlike=False).filter(
             lambda p: os.path.normcase(p) != p).example()
 
@@ -136,7 +136,7 @@ def test_allow_pathlike_false(path):
 
 
 def test_allow_pathlike_fail_when_not_available():
-    if not hasattr(os, "PathLike"):
+    if not hasattr(os, 'PathLike'):
         with pytest.raises(InvalidArgument):
             fspaths(allow_pathlike=True).example()
 

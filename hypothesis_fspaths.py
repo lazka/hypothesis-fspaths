@@ -29,6 +29,7 @@ from hypothesis.errors import InvalidArgument
 
 text_type = type(u"")
 PY3 = (sys.version_info[0] == 3)
+defines_strategy = lambda x: x
 
 
 class _PathLike(object):
@@ -50,6 +51,11 @@ class _PathLike(object):
 
 @composite
 def _filename(draw, result_type=None):
+    """Generate a path value of type result_type.
+
+    result_type can either be bytes or text_type
+
+    """
     # Various ASCII chars have a special meaning for the operating system,
     # so make them more common
     ascii_char = characters(min_codepoint=0x01, max_codepoint=0x7f)
@@ -74,7 +80,7 @@ def _filename(draw, result_type=None):
     else:
         latin_char = characters(min_codepoint=0x01, max_codepoint=0xff)
         bytes_strategy = text(alphabet=one_of(latin_char, ascii_char)).map(
-            lambda t: t.encode("latin-1"))
+            lambda t: t.encode('latin-1'))
 
         unix_path_text = bytes_strategy.map(
             lambda b: b.decode(
@@ -96,23 +102,23 @@ def _filename(draw, result_type=None):
 
 
 def _str_to_path(s, result_type):
-    """Given an ASCII str, returns a path of the given type"""
+    """Given an ASCII str, returns a path of the given type."""
 
     assert isinstance(s, str)
     if isinstance(s, bytes) and result_type is text_type:
-        return s.decode("ascii")
+        return s.decode('ascii')
     elif isinstance(s, text_type) and result_type is bytes:
-        return s.encode("ascii")
+        return s.encode('ascii')
     return s
 
 
 @composite
 def _path_root(draw, result_type):
-    """Generates a root component for a path"""
+    """Generates a root component for a path."""
 
     # Based on https://en.wikipedia.org/wiki/Path_(computing)
 
-    def tp(s):
+    def tp(s=''):
         return _str_to_path(s, result_type)
 
     if os.name != 'nt':
@@ -124,30 +130,32 @@ def _path_root(draw, result_type):
 
     relative = sep
     # [drive_letter]:\
-    drive = builds(lambda *x: tp("").join(x), char, just(tp(":")), sep)
+    drive = builds(lambda *x: tp().join(x), char, just(tp(':')), sep)
+    # \\?\[drive_spec]:\
+    extended = builds(
+        lambda *x: tp().join(x), sep, sep, just(tp('?')), sep, drive)
 
     network = one_of([
         # \\[server]\[sharename]\
-        builds(lambda *x: tp("").join(x), sep, sep, name, sep, name, sep),
-        # \\?\[drive_spec]:\
-        builds(lambda *x: tp("").join(x), sep, sep, just(tp("?")), sep, drive),
+        builds(lambda *x: tp().join(x), sep, sep, name, sep, name, sep),
         # \\?\[server]\[sharename]\
-        builds(lambda *x: tp("").join(x),
-               sep, sep, just(tp("?")), sep, name, sep, name, sep),
+        builds(lambda *x: tp().join(x),
+               sep, sep, just(tp('?')), sep, name, sep, name, sep),
         # \\?\UNC\[server]\[sharename]\
-        builds(lambda *x: tp("").join(x),
-               sep, sep, just(tp("?")), sep, just(tp("UNC")), sep, name, sep,
+        builds(lambda *x: tp().join(x),
+               sep, sep, just(tp('?')), sep, just(tp('UNC')), sep, name, sep,
                name, sep),
         # \\.\[physical_device]\
-        builds(lambda *x: tp("").join(x),
-               sep, sep, just(tp(".")), sep, name, sep),
+        builds(lambda *x: tp().join(x),
+               sep, sep, just(tp('.')), sep, name, sep),
     ])
 
-    final = one_of(relative, drive, network)
+    final = one_of(relative, drive, extended, network)
 
     return draw(final)
 
 
+@defines_strategy
 @composite
 def fspaths(draw, allow_pathlike=None, allow_existing=False):
     """A strategy which generates filesystem path values.
@@ -172,20 +180,20 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
         If paths which exist on the filesystem should be generated as well.
 
     .. versionadded:: 3.15
-    """
 
-    has_pathlike = hasattr(os, "PathLike")
+    """
+    has_pathlike = hasattr(os, 'PathLike')
 
     if allow_pathlike is None:
         allow_pathlike = has_pathlike
     if allow_pathlike and not has_pathlike:
         raise InvalidArgument(
-            "allow_pathlike: os.PathLike not supported, use None instead "
-            "to enable it only when available")
+            'allow_pathlike: os.PathLike not supported, use None instead '
+            'to enable it only when available')
 
     result_type = draw(sampled_from([bytes, text_type]))
 
-    def tp(s=""):
+    def tp(s=''):
         return _str_to_path(s, result_type)
 
     special_component = sampled_from([tp(os.curdir), tp(os.pardir)])
