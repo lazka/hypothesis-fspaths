@@ -165,7 +165,7 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
     :exc:`ValueError` or :exc:`TypeError` being raised.
 
     Note that the range of the returned values depends on the operating
-    system, the Python version, and on the filesystem encoding as returned by
+    system, the Python version, and the filesystem encoding as returned by
     :func:`sys.getfilesystemencoding`.
 
     :param allow_pathlike:
@@ -177,7 +177,7 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
     :type allow_pathlike: :obj:`python:bool` or :obj:`python:None`
 
     :param bool allow_existing:
-        If paths which exist on the filesystem should be generated as well.
+        If paths which exist on the filesystem should be generated.
 
     .. versionadded:: 3.15
 
