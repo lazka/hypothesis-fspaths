@@ -29,7 +29,7 @@ import tempfile
 
 import pytest
 
-from hypothesis import given
+from hypothesis import given, find
 from hypothesis_fspaths import fspaths
 from hypothesis.errors import InvalidArgument
 
@@ -136,6 +136,50 @@ def test_open(tempdir_path, path):
             pass
     except IOError:
         pass
+
+
+def test_avoids_existing(tempdir_path):
+
+    def find_fresh_file_can_create():
+
+        def is_filename_and_can_create(p):
+            if os.path.basename(p) != p:
+                return False
+
+            try:
+                with open(p, "w"):
+                    pass
+            except EnvironmentError:
+                return False
+            else:
+                os.unlink(p)
+                return True
+
+        return find(fspaths(allow_existing=False, allow_pathlike=False),
+                    is_filename_and_can_create)
+
+    old_cwd = os.getcwd()
+    f1 = None
+    try:
+        os.chdir(tempdir_path)
+
+        f1 = find_fresh_file_can_create()
+        f2 = find_fresh_file_can_create()
+        # checks replay is working correctly: find should find the same
+        # thing twice.
+        assert f1 == f2
+
+        with open(f1, 'w'):
+            pass
+
+        # The file now exists, so we are forced to avoid it
+        # and have to generate a new one.
+        f3 = find_fresh_file_can_create()
+        assert f3 != f1
+    finally:
+        if f1:
+            os.unlink(f1)
+        os.chdir(old_cwd)
 
 
 @given(fspaths(allow_pathlike=False))
