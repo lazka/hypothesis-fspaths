@@ -169,9 +169,9 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
     :func:`sys.getfilesystemencoding`.
 
     :param allow_pathlike:
-        By default makes the strategy also include objects implementing the
-        :class:`python:os.PathLike` interface when Python >= 3.6 is used. If
-        :obj:`python:False` no pathlike objects will be generated. If
+        If :obj:`python:None` makes the strategy include objects implementing
+        the :class:`python:os.PathLike` interface when Python >= 3.6 is used.
+        If :obj:`python:False` no pathlike objects will be generated. If
         :obj:`python:True` pathlike will be generated (Python >= 3.6 required)
 
     :type allow_pathlike: :obj:`python:bool` or :obj:`python:None`
