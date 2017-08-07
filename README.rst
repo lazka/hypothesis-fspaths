@@ -24,3 +24,6 @@ Example
 
 .. image:: https://travis-ci.org/lazka/hypothesis-fspaths.svg?branch=master
     :target: https://travis-ci.org/lazka/hypothesis-fspaths
+
+.. image:: https://ci.appveyor.com/api/projects/status/58ooix7enbn7qdt7/branch/master?svg=true
+    :target: https://ci.appveyor.com/project/lazka/hypothesis-fspaths/branch/master
