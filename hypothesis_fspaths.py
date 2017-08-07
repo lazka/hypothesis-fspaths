@@ -148,7 +148,8 @@ def _path_root(draw, result_type):
 
     sep = sampled_from([os.sep, os.altsep or os.sep]).map(tp)
     name = _filename(result_type)
-    char = characters(min_codepoint=ord("A"), max_codepoint=ord("z")).map(tp)
+    char = characters(min_codepoint=ord("A"), max_codepoint=ord("z")).map(
+        lambda c: tp(str(c)))
 
     relative = sep
     # [drive_letter]:\

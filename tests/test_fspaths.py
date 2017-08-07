@@ -139,9 +139,8 @@ def test_open(tempdir_path, path):
 
 
 def test_path_exists(tempdir_path):
-    for l in range(1000, 10000, 100000):
-        assert _path_exists(b"x" * l) is None
-    assert not _path_exists(b"") and _path_exists(b"") is not None
+    assert _path_exists(os.path.join(tempdir_path, "x" * 100000)) is None
+    assert not _path_exists("") and _path_exists("") is not None
 
     temp_file = os.path.join(tempdir_path, 'foo')
     open(temp_file, 'w').close()
