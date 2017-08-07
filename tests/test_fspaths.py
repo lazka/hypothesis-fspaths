@@ -44,9 +44,17 @@ def test_path_property_examples():
         fspaths(allow_pathlike=False).filter(
             lambda p: os.path.normcase(p) != p).example()
 
-        fspaths(allow_pathlike=False).filter(
-            lambda p: (os.path.splitdrive(p)[0] and
-                       not os.path.splitunc(p)[0])).example()
+        def is_valid_ascii_drive(p):
+            if os.path.splitunc(p)[0]:
+                return False
+
+            drive = os.path.splitdrive(p)[0]
+            if len(drive) != 2:
+                return False
+
+            return ord("A") <= ord(drive[0:1]) <= ord("z")
+
+        fspaths(allow_pathlike=False).filter(is_valid_ascii_drive).example()
 
         fspaths(allow_pathlike=False).filter(
             lambda p: os.path.splitunc(p)[0]).example()
