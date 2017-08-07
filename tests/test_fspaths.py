@@ -143,7 +143,7 @@ def test_avoids_existing(tempdir_path):
     def find_fresh_file_can_create():
 
         def is_filename_and_can_create(p):
-            if os.path.basename(p) != p:
+            if os.path.basename(p) != fspath(p):
                 return False
 
             try:
@@ -155,8 +155,7 @@ def test_avoids_existing(tempdir_path):
                 os.unlink(p)
                 return True
 
-        return find(fspaths(allow_existing=False, allow_pathlike=False),
-                    is_filename_and_can_create)
+        return find(fspaths(allow_existing=False), is_filename_and_can_create)
 
     old_cwd = os.getcwd()
     f1 = None
