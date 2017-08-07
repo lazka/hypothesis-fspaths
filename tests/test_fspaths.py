@@ -30,7 +30,7 @@ import tempfile
 import pytest
 
 from hypothesis import given, find
-from hypothesis_fspaths import fspaths
+from hypothesis_fspaths import fspaths, _path_exists
 from hypothesis.errors import InvalidArgument
 
 text_type = type(u'')
@@ -136,6 +136,19 @@ def test_open(tempdir_path, path):
             pass
     except IOError:
         pass
+
+
+def test_path_exists(tempdir_path):
+    for l in range(1000, 10000, 100000):
+        assert _path_exists(b"x" * l) is None
+    assert not _path_exists(b"") and _path_exists(b"") is not None
+
+    temp_file = os.path.join(tempdir_path, 'foo')
+    open(temp_file, 'w').close()
+    try:
+        assert _path_exists(temp_file)
+    finally:
+        os.unlink(temp_file)
 
 
 def test_avoids_existing(tempdir_path):
