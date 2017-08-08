@@ -125,7 +125,7 @@ def _path_exists(path):
         # os.path.exists()
         os.lstat(path)
     except OSError as e:
-        if e.errno in (errno.ENOENT, errno.ENOTDIR):
+        if e.errno == errno.ENOENT:
             return False
         return None
     except ValueError:
