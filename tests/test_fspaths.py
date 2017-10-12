@@ -29,7 +29,7 @@ import tempfile
 
 import pytest
 
-from hypothesis import given, find
+from hypothesis import given
 from hypothesis_fspaths import fspaths
 from hypothesis.errors import InvalidArgument
 
