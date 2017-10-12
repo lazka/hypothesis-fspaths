@@ -30,7 +30,7 @@ import tempfile
 import pytest
 
 from hypothesis import given, find
-from hypothesis_fspaths import fspaths, _path_exists
+from hypothesis_fspaths import fspaths
 from hypothesis.errors import InvalidArgument
 
 text_type = type(u'')
@@ -116,7 +116,7 @@ def test_path_join(path):
     assert type(fspath(path)) is type(os.path.join(path, path))
 
 
-@given(fspaths(allow_existing=True).map(os.path.basename))
+@given(fspaths().map(os.path.basename))
 def test_open(tempdir_path, path):
     # To prevent side effects, only access a path in a temp directory we have
     # created
@@ -138,60 +138,6 @@ def test_open(tempdir_path, path):
         pass
 
 
-def test_path_exists(tempdir_path):
-    assert not _path_exists("") and _path_exists("") is not None
-
-    temp_file = os.path.join(tempdir_path, 'foo')
-    open(temp_file, 'w').close()
-    try:
-        assert _path_exists(temp_file)
-    finally:
-        os.unlink(temp_file)
-
-
-def test_avoids_existing(tempdir_path):
-
-    def find_fresh_file_can_create():
-
-        def is_filename_and_can_create(p):
-            if os.path.basename(p) != fspath(p):
-                return False
-
-            try:
-                with open(p, "w"):
-                    pass
-            except EnvironmentError:
-                return False
-            else:
-                os.unlink(p)
-                return True
-
-        return find(fspaths(allow_existing=False), is_filename_and_can_create)
-
-    old_cwd = os.getcwd()
-    f1 = None
-    try:
-        os.chdir(tempdir_path)
-
-        f1 = find_fresh_file_can_create()
-        f2 = find_fresh_file_can_create()
-        # checks replay is working correctly: find should find the same
-        # thing twice.
-        assert f1 == f2
-
-        with open(f1, 'w'):
-            pass
-
-        # The file now exists, so we are forced to avoid it
-        # and have to generate a new one.
-        f3 = find_fresh_file_can_create()
-        assert f3 != f1
-    finally:
-        if f1:
-            os.unlink(f1)
-        os.chdir(old_cwd)
-
-
 @given(fspaths(allow_pathlike=False))
 def test_allow_pathlike_false(path):
     assert isinstance(path, (bytes, text_type))
@@ -203,19 +149,9 @@ def test_allow_pathlike_fail_when_not_available():
             fspaths(allow_pathlike=True).example()
 
 
-@given(fspaths())
-def test_no_allow_existing(path):
-    try:
-        os.lstat(path)
-    except OSError:
-        pass
-    else:
-        assert False
-
-
 def test_example_basic():
-    fspaths(allow_existing=True).filter(lambda p: not fspath(p)).example()
-    fspaths(allow_existing=True).filter(
+    fspaths().filter(lambda p: not fspath(p)).example()
+    fspaths().filter(
         lambda p: len(fspath(p)) > 20).example()
 
 
@@ -225,13 +161,13 @@ def test_example_types():
         p = fspath(p)
         return isinstance(p, bytes)
 
-    fspaths(allow_existing=True).filter(is_bytes).example()
+    fspaths().filter(is_bytes).example()
 
     def is_text(p):
         p = fspath(p)
         return isinstance(p, text_type)
 
-    fspaths(allow_existing=True).filter(is_text).example()
+    fspaths().filter(is_text).example()
 
     def is_pathlike(p):
         # there should be values implementing os.PathLike
@@ -241,7 +177,7 @@ def test_example_types():
         return True
 
     if hasattr(os, 'PathLike'):
-        value = fspaths(allow_existing=True).filter(is_pathlike).example()
+        value = fspaths().filter(is_pathlike).example()
         assert repr(value) == 'pathlike(%r)' % os.fspath(value)
 
 
@@ -263,7 +199,7 @@ def test_find_text_with_surrogateescape():
         else:
             return False
 
-    fspaths(allow_existing=True).filter(text_with_surrogateescape).example()
+    fspaths().filter(text_with_surrogateescape).example()
 
 
 @pytest.mark.skipif(not is_win or not PY3, reason='PY3+Windows only')
@@ -283,7 +219,7 @@ def test_find_text_with_surrogatepass():
         else:
             return False
 
-    fspaths(allow_existing=True).filter(text_with_surrogatepass).example()
+    fspaths().filter(text_with_surrogatepass).example()
 
 
 @pytest.mark.skipif(single_byte_full_encoding(encoding) or is_win,
@@ -303,7 +239,7 @@ def test_find_bytes_has_non_decodable():
             return True
         return False
 
-    fspaths(allow_existing=True).filter(bytes_has_non_decodable).example()
+    fspaths().filter(bytes_has_non_decodable).example()
 
 
 @pytest.mark.skipif(
@@ -321,7 +257,7 @@ def test_find_text_surrogates_merge_in_bytes_form():
         return p.encode(encoding, 'surrogateescape').decode(
             encoding, 'surrogateescape') != p
 
-    fspaths(allow_existing=True).filter(
+    fspaths().filter(
         text_surrogates_merge_in_bytes_form).example()
 
 
@@ -340,5 +276,5 @@ def test_text_contains_unmerged_surrogates_pairs():
         return p.encode('utf-16-le', 'surrogatepass').decode(
             'utf-16-le', 'surrogatepass') != p
 
-    fspaths(allow_existing=True).filter(
+    fspaths().filter(
         text_contains_unmerged_surrogates_pairs).example()
