@@ -22,7 +22,6 @@
 
 import os
 import sys
-import errno
 
 from hypothesis.strategies import composite, one_of, characters, \
     text, permutations, builds, lists, sampled_from, just
@@ -113,27 +112,6 @@ def _str_to_path(s, result_type):
     return s
 
 
-def _path_exists(path):
-    """If the file at path does exist.
-
-    Returns True if the file does exist, False if it doesn't and None in case
-    no answer can be given because the path is too long for example.
-
-    """
-    try:
-        # Use lstat because it can detect broken symlinks unlike
-        # os.path.exists()
-        os.lstat(path)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            return False
-        return None
-    except ValueError:
-        return None
-    else:
-        return True
-
-
 @composite
 def _path_root(draw, result_type):
     """Generates a root component for a path."""
@@ -180,7 +158,7 @@ def _path_root(draw, result_type):
 
 @defines_strategy
 @composite
-def fspaths(draw, allow_pathlike=None, allow_existing=False):
+def fspaths(draw, allow_pathlike=None):
     """A strategy which generates filesystem path values.
 
     The generated values include everything which the builtin
@@ -198,9 +176,6 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
         :obj:`python:True` pathlike will be generated (Python >= 3.6 required)
 
     :type allow_pathlike: :obj:`python:bool` or :obj:`python:None`
-
-    :param bool allow_existing:
-        If paths which exist on the filesystem should be generated.
 
     .. versionadded:: 3.15
 
@@ -232,23 +207,6 @@ def fspaths(draw, allow_pathlike=None, allow_existing=False):
     path_part = builds(lambda s, l: s.join(l), sep, lists(path_component))
     main_strategy = builds(lambda *x: tp().join(x),
                            optional(root), path_part, optional(extension))
-
-    if not allow_existing:
-
-        def path_definitely_not_exists(path):
-            result = _path_exists(path)
-            # In case we can't be sure assume the file might exist
-            if result is None:
-                return False
-            return not result
-
-        main_strategy = main_strategy.filter(path_definitely_not_exists)
-    else:
-        # When allow_existing is False we have to filter out too long paths.
-        # For consistency also filter them out when not checking for existing
-        # files.
-        main_strategy = main_strategy.filter(
-            lambda p: _path_exists(p) is not None)
 
     if allow_pathlike and hasattr(os, 'fspath'):
         pathlike_strategy = main_strategy.map(lambda p: _PathLike(p))
